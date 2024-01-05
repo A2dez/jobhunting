@@ -6,18 +6,12 @@ library(readr)
 library(purrr)
 library(magrittr)
 
+
+source("functions.R")
+source("config.R")
+
 CURRENCY <- "€"
 
-#Add Dublin as default location
-#this will live in a config file
-search_terms <- list("keywords" = 'data%2Bvisualization', 
-                     "location" = "ireland",
-                     "location2" = "dublin", #E.g. smaller more relevant location
-                     "geoId" = "",
-                     'trk' = "", 
-                     "start" = 0, #LinkedIn is zero-indexed
-                     "end" = 2000,  #likely to be a variable, unlike start and steps
-                     "steps" = 25) #default                )
 
 
 #later versions will need this to be broken down fruther
@@ -30,94 +24,28 @@ url_unnumbered = paste0('https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJob
 
 pages_to_grab <- seq(search_terms[["start"]],search_terms[["end"]], search_terms[["steps"]])
 
+#speed up:
+#insert section to get rid of unwanted urls (i.e. likely no jobs there )
+
+# # https://stackoverflow.com/questions/56067780/r-using-purrrsafely-to-handle-webscraping-failed-urls
+urls <- paste0(url_unnumbered, pages_to_grab)
+h <- urls[1:2] %>%
+  map(~{
+    Sys.sleep(sample(seq(1, 3, by=0.001), 1))
+    safe_html(.x)})
+jobs_raw <- discard(map(h, 'result'), ~ is.null(.x)) 
 
 
-# saveRDS(jobs_raw, file.path(output, search_terms[["keywords"]]))
-# View(jobs_dfrm)
 
-# valid_url <- function(url_in,t=2){
-#   con <- url(url_in)
-#   check <- suppressWarnings(try(open.connection(con,open="rt",timeout=t),silent=T)[1])
-#   suppressWarnings(try(close.connection(con),silent=T))
-#   ifelse(is.null(check),TRUE,FALSE)
-# }
+jobs_data <- scrape_jobs_by_keyword(jobs_raw, output = getwd(), location2 = 'dublin')
+glimpse(jobs_data)
 
-scrape_jobs_by_keyword <- function(jobs_raw, output, location2) {
-  
-  jobs_dfrm <-  jobs_raw  %>%
-    #grab the 'li' nodes then 'div' and extract text. Convert to tibble for ease of manipulation
-    #id lets us match each batch of scraped data with its equivalent set of links below
-    map_dfr( ~.x %>% html_nodes('li') %>%html_nodes("div") %>% html_text2 %>% as_tibble, .id = 'step') %>% 
-    #how many \ns are there? 
-    #we only want the lines with an empty row following it
-    mutate(empty_next = !str_detect(lead(value), '[[:graph:]]')) %>% 
-    filter(empty_next == T) %>%
-    #brutal column names for now. should be five bits of data separated by \n
-    separate(col = value, into = letters[1:5], sep = "\\n")    %>% 
-    #extract age of ad e.g. 1 month ago, 10 months ago
-    #then extract salary data in Euros. 
-    mutate(e = if_else(is.na(e), str_extract(d, '\\d+.*?$'), e), 
-           salary = if_else(str_detect(d, CURRENCY), str_extract(d, paste0(CURRENCY, ".*")), NA_character_))
-  
-  
-  links <- jobs_raw  %>% map_dfr(~.x %>% html_nodes('li') %>% html_nodes('a') %>% html_attr('href') %>% as_tibble, .id = 'step')
-  
-  links$aorb <- as.logical(seq_along(links$value) %% 2)
-  links <- links %>% 
-    group_by(step, aorb) %>%
-    mutate(id = seq_along(value)) %>% 
-    pivot_wider(names_from = aorb, values_from = value ) %>%
-    ungroup %>%
-    select(link1 = "TRUE", link2 = "FALSE")
-  
-  
-  jobs_dfrm$location2 <- str_detect(jobs_dfrm$d, regex(location2, ignore_case = T))
-  jobs_dfrm$id <- seq_along(jobs_dfrm$a)
-  jobs_dfrm <- jobs_dfrm %>% group_by(b) %>% mutate(count1 = n()) %>% ungroup %>% group_by(c) %>% mutate(count2 = n()) %>% ungroup
-  jobs_dfrm <- bind_cols(jobs_dfrm, links) 
-  jobs_dfrm <- jobs_dfrm %>% select( id, count1, b, c,count2, location2, e, salary, link1, link2, d)
-  
-  write_csv(jobs_dfrm, file.path(output, paste0(search_terms[["keywords"]], '.csv')))
-  return(jobs_dfrm)
-}
 
-scrape_jobs_by_keyword(jobs_raw[1:15], output = getwd(), location2 = 'dublin')
-# jobs_raw <- discard(map(h, 'result'), ~ is.null(.x)) 
-# length(jobs_raw)
-
-# search_terms <- list("keywords" = 'Data%2BAnnotation', 
-#                      "location" = "ireland",
-#                      "geoId" = "",
-#                      'trk' = "", 
-#                      "start" = 0, #LinkedIn is zero-indexed
-#                      "end" = 100,  #likely to be a variable, unlike start and steps
-#                      "steps" = 25)
-# 
-# search_terms <- list("keywords" = 'Data%2BViz', 
-#                      "location" = "ireland",
-#                      "geoId" = "",
-#                      'trk' = "", 
-#                      "start" = 0, #LinkedIn is zero-indexed
-#                      "end" = 75,  #likely to be a variable, unlike start and steps
-#                      "steps" = 25)
-
-#this should be a while statement
-# jobs_raw <- map(pages_to_grab, ~ read_html(paste0(url_unnumbered, .x)) )
-# jobs_raw = list() #rep(length(pages_to_grab)
-# urls = paste0(url_unnumbered, pages_to_grab)
 # urls_existence = sapply(urls[1:2],valid_url)
 # urls_existence[1][[1]]
 # 
 # 
-# # https://stackoverflow.com/questions/56067780/r-using-purrrsafely-to-handle-webscraping-failed-urls
-# library(dplyr)
-# library(purrr)
-# safe_html <- safely(read_html, otherwise = NULL)
-# h <- urls %>% 
-#   map(~{
-#     Sys.sleep(sample(seq(1, 3, by=0.001), 1))
-#     safe_html(.x)})
-# 
+
 # f <- scrape_jobs_by_keyword(jobs_raw, output = getwd(), location2 = 'dublin')
 # f2 <- scrape_jobs_by_keyword(h[[1]]$result %>% list, output = getwd(), location2 = 'dublin')
 # 
