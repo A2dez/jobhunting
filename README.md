@@ -1,6 +1,6 @@
-# jobhunting
+# Scrape jobs data from LinkedIn
 
-###To run:
+### To run:
 Change search terms in config.R and then run this in your terminal:
 Multiple words must separated by '%2B', as in data%2Bscience. I'll fix this with next commit. 
 
