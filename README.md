@@ -12,7 +12,7 @@ Prerequisites:
 You will need R: Here are the mirrors for many locations. Click on one near you and then download R
 [https://cran.r-project.org/mirrors.html]
 
-###Description
+### Description
 
 This tool searches LinkedIn for job listings, based on keywords and location (for now), and creates a csv file with the data listed on the search page:
 - job title
@@ -23,7 +23,7 @@ This tool searches LinkedIn for job listings, based on keywords and location (fo
 
 It then scrapes the data from each listing, and adds more data. For now, that's just the number of applicants, but the tool saves the scraped data in an rds file (using a list column), for later analysis. 
 
-###More config details. 
+### More config details. 
 start: 0 by default as LinkedIn is zero-indexed. Should the scraper begin at the 0th job, or at, say, the 50th? 
 steps: LinkedIn lists 25 jobs per search page, so 'steps' is set to 25 by default, in the config. 
 end: A multiple of steps. Set to 100 for now, so the tool will scrape 100 + 25 listings. 
