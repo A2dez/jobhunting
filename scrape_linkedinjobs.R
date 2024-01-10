@@ -11,7 +11,7 @@ source("functions.R")
 source("config.R")
 
 CURRENCY <- "€"
-
+output <- getwd()
 
 
 #later versions will need this to be broken down fruther
@@ -29,17 +29,45 @@ pages_to_grab <- seq(search_terms[["start"]],search_terms[["end"]], search_terms
 
 # # https://stackoverflow.com/questions/56067780/r-using-purrrsafely-to-handle-webscraping-failed-urls
 urls <- paste0(url_unnumbered, pages_to_grab)
-h <- urls[1:2] %>%
-  map(~{
-    Sys.sleep(sample(seq(1, 3, by=0.001), 1))
-    safe_html(.x)})
-jobs_raw <- discard(map(h, 'result'), ~ is.null(.x)) 
 
+#Scrape URLS, make a tibble, then re-run 'read_html_safe' on links which failed (NULLS)
+scraped_data = read_html_safe(urls)
+scraped_dfrm <- tibble(url = urls,scraped_data ) 
+scraped_dfrm <- scraped_dfrm %>% mutate( scraped_data = if_else(sapply(scraped_data, is.null), read_html_safe(url), scraped_data))
+scraped_dfrm <- scraped_dfrm[which(!sapply(scraped_dfrm$scraped_data, is.null)),] 
 
+#extract job data from scraped html
+jobs_data <- scrape_jobs_by_keyword(jobs_raw = scraped_dfrm$scraped_data , output = getwd(), location2 = 'dublin')
+# View(jobs_data)
+#Then scrape full listing for each job in turn
+listing_full_dfrm <- scrape_repeatedly(jobs_data$job_link) 
+listing_full_dfrm$applicants <- sapply(listing_full_dfrm$scraped_data, function(html_data) {if(is.null(html_data)){NA_integer_} else {pull_job_data(html_data)} })
 
-jobs_data <- scrape_jobs_by_keyword(jobs_raw, output = getwd(), location2 = 'dublin')
-glimpse(jobs_data)
+#join the newly scraped & plucked data to the main jobs_dfrm
+jobs_data <- jobs_data %>% left_join(listing_full_dfrm, by = c('job_link' = 'url')) %>%
+  # mutate(notes = '') %>%
+  relocate(applicants, .after = 'count1') #%>%
+  # relocate(notes, .after = 'c')
 
+write_csv(jobs_data %>% discard(is.list), 
+          file.path(output, paste0(search_terms[["keywords"]],'_', Sys.Date(), '.csv')))
+
+saveRDS(jobs_data, 
+          file.path(output, paste0(search_terms[["keywords"]],'_', Sys.Date(), '.rds')))
+
+# jobs_csv_path <- "/Users/admin/rprojects/jobhunting/data%2Bvisualization.csv"
+# steve_dfrm <- read_csv(jobs_csv_path)
+# joblink_vector_name = 'link1' #this might change above 
+
+# jobs_raw <- steve_dfrm[[joblink_vector_name]] %>% map(~safe_html(.x)) #slow and unreliable because scraping. will need a second loop to catch failures
+# #extract the result part cos purrr:safely gives a list with result and error
+# jobs_data <- lapply(jobs_raw, function(safe_result){ safe_result %>% pluck( 'result')})
+# # steve_dfrm$raw_data <- jobs_data
+# steve_dfrm$applicants <- sapply(jobs_data, function(html_data) {if(is.null(html_data)){NA_integer_} else {pull_job_data(html_data)} })
+# # job_applicants_not_null <- jobs_data[!sapply(jobs_data,is.null)]
+# saveRDS(jobs_data, str_replace(jobs_csv_path, 'csv$', 'rds'))
+
+# View(steve_dfrm)
 
 # urls_existence = sapply(urls[1:2],valid_url)
 # urls_existence[1][[1]]
